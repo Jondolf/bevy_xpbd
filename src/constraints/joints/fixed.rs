@@ -10,8 +10,12 @@ use bevy::{
 ///
 /// You should generally prefer using a single body instead of multiple bodies fixed together,
 /// but fixed joints can be useful for things like rigid structures where a force can dynamically break the joints connecting individual bodies.
-#[derive(Component, Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Reflect, Component, Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(
+    feature = "serialize",
+    derive(serde::Serialize, serde::Deserialize),
+    reflect(Serialize, Deserialize)
+)]
 pub struct FixedJoint {
     /// First entity constrained by the joint.
     pub entity1: Entity,
