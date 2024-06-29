@@ -28,8 +28,12 @@ use crate::prelude::*;
 ///     commands.spawn(RayCaster::default().with_query_filter(query_filter));
 /// }
 /// ```
-#[derive(Clone)]
-#[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, PartialEq, Reflect)]
+#[cfg_attr(
+    feature = "serialize",
+    derive(serde::Serialize, serde::Deserialize),
+    reflect(Serialize, Deserialize)
+)]
 pub struct SpatialQueryFilter {
     /// Specifies which [collision layers](CollisionLayers) will be included in the [spatial query](crate::spatial_query).
     pub mask: LayerMask,
