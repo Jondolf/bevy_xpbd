@@ -93,7 +93,7 @@ bevy_xpbd_3d = "0.4"
 bevy_xpbd_3d = { git = "https://github.com/Jondolf/bevy_xpbd", branch = "main" }
 ```
 
-Below is a very simple example where a box with initial angular velocity falls onto a plane. This is a modified version of Bevy's [3d_scene](https://bevyengine.org/examples/3d/3d-scene/) example.
+Below is a very simple example where a box with initial angular velocity falls onto a plane. This is a modified version of Bevy's [3d_scene](https://bevyengine.org/examples/3D%20Rendering/3d-scene/) example.
 
 ```rust
 use bevy::prelude::*;
@@ -106,47 +106,51 @@ fn main() {
         .run();
 }
 
+/// set up a simple 3D scene
 fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // Plane
+    // circular base
     commands.spawn((
         RigidBody::Static,
-        Collider::cuboid(8.0, 0.002, 8.0),
+        Collider::compound(vec![(
+            Position(Vec3::ZERO),
+            Rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
+            Collider::cylinder(0.002, 4.0),
+        )]),
         PbrBundle {
-            mesh: meshes.add(Plane3d::default().mesh().size(8.0, 8.0)),
-            material: materials.add(Color::rgb(0.3, 0.5, 0.3)),
+            mesh: meshes.add(Circle::new(4.0)),
+            material: materials.add(Color::WHITE),
+            transform: Transform::from_rotation(Quat::from_rotation_x(
+                -std::f32::consts::FRAC_PI_2,
+            )),
             ..default()
         },
     ));
-
-    // Cube
+    // cube
     commands.spawn((
         RigidBody::Dynamic,
         AngularVelocity(Vec3::new(2.5, 3.4, 1.6)),
         Collider::cuboid(1.0, 1.0, 1.0),
         PbrBundle {
-            mesh: meshes.add(Cuboid::default()),
-            material: materials.add(Color::rgb(0.8, 0.7, 0.6)),
+            mesh: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
+            material: materials.add(Color::rgb_u8(124, 144, 255)),
             transform: Transform::from_xyz(0.0, 4.0, 0.0),
             ..default()
         },
     ));
-
-    // Light
+    // light
     commands.spawn(PointLightBundle {
         point_light: PointLight {
-            intensity: 2_000_000.0,
             shadows_enabled: true,
             ..default()
         },
         transform: Transform::from_xyz(4.0, 8.0, 4.0),
         ..default()
     });
-
-    // Camera
+    // camera
     commands.spawn(Camera3dBundle {
         transform: Transform::from_xyz(-4.0, 6.5, 8.0).looking_at(Vec3::ZERO, Vec3::Y),
         ..default()
@@ -154,7 +158,7 @@ fn setup(
 }
 ```
 
-<https://user-images.githubusercontent.com/57632562/230185604-b40441a2-48d8-4566-9b9e-be4825f4877e.mp4>
+<https://gist.github.com/assets/45217840/9a56edcf-03d5-4999-92fb-f577607b332c>
 
 ## More examples
 
