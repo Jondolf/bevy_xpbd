@@ -237,6 +237,8 @@ impl Not for LayerMask {
 /// Colliders without this component can be considered as having all memberships and filters, and they can
 /// interact with everything that belongs on any layer.
 ///
+/// See also [`IgnoredCollisions`](crate::components::IgnoredCollisions).
+///
 /// ## Creation
 ///
 /// Collision layers store memberships and filters using [`LayerMask`]s. A [`LayerMask`] can be created using

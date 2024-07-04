@@ -157,8 +157,9 @@ fn add_new_aabb_intervals(
 fn collect_collision_pairs(
     intervals: ResMut<AabbIntervals>,
     mut broad_collision_pairs: ResMut<BroadCollisionPairs>,
+    ignored_collisions: Query<&IgnoredCollisions>,
 ) {
-    sweep_and_prune(intervals, &mut broad_collision_pairs.0);
+    sweep_and_prune(intervals, &mut broad_collision_pairs.0, ignored_collisions);
 }
 
 /// Sorts the entities by their minimum extents along an axis and collects the entity pairs that have intersecting AABBs.
@@ -167,6 +168,7 @@ fn collect_collision_pairs(
 fn sweep_and_prune(
     mut intervals: ResMut<AabbIntervals>,
     broad_collision_pairs: &mut Vec<(Entity, Entity)>,
+    ignored_collisions: Query<&IgnoredCollisions>,
 ) {
     // Sort bodies along the x-axis using insertion sort, a sorting algorithm great for sorting nearly sorted lists.
     insertion_sort(&mut intervals.0, |a, b| a.2.min.x > b.2.min.x);
@@ -176,7 +178,27 @@ fn sweep_and_prune(
 
     // Find potential collisions by checking for AABB intersections along all axes.
     for (i, (ent1, parent1, aabb1, layers1, inactive1)) in intervals.0.iter().enumerate() {
+        let ent1_ignored_collisions = ignored_collisions.get(*ent1).ok();
         for (ent2, parent2, aabb2, layers2, inactive2) in intervals.0.iter().skip(i + 1) {
+            // Check ignored collisions of `ent1`
+            if ent1_ignored_collisions
+                .as_ref()
+                .map(|i| i.contains(ent2))
+                .unwrap_or_default()
+            {
+                continue;
+            }
+
+            // Check ignored collisions of `ent2`
+            let ent2_ignored_collisions = ignored_collisions.get(*ent2).ok();
+            if ent2_ignored_collisions
+                .as_ref()
+                .map(|i| i.contains(ent1))
+                .unwrap_or_default()
+            {
+                continue;
+            }
+
             // x doesn't intersect; check this first so we can discard as soon as possible
             if aabb2.min.x > aabb1.max.x {
                 break;

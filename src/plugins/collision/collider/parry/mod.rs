@@ -255,7 +255,7 @@ impl From<TrimeshFlags> for parry::shape::TriMeshFlags {
 /// ```
 ///
 /// Colliders can be further configured using various components like [`Friction`], [`Restitution`],
-/// [`Sensor`], and [`CollisionLayers`].
+/// [`Sensor`], [`IgnoredCollisions`], and [`CollisionLayers`].
 ///
 /// In addition, Bevy XPBD automatically adds some other components for colliders, like the following:
 ///
@@ -337,6 +337,7 @@ impl From<TrimeshFlags> for parry::shape::TriMeshFlags {
 /// - [Rigid bodies](RigidBody)
 /// - [Density](ColliderDensity)
 /// - [Friction] and [restitution](Restitution) (bounciness)
+/// - [Ignoring collisions](IgnoredCollisions)
 /// - [Collision layers](CollisionLayers)
 /// - [Sensors](Sensor)
 #[cfg_attr(
