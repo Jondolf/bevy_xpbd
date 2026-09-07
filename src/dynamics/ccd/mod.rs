@@ -217,6 +217,8 @@
 #[cfg(any(feature = "parry-f32", feature = "parry-f64"))]
 use super::solver::solver_body::{SolverBodies, SolverBody, SolverBodyFlags, SolverBodyIndex};
 #[cfg(any(feature = "parry-f32", feature = "parry-f64"))]
+use crate::QueryDispatcher;
+#[cfg(any(feature = "parry-f32", feature = "parry-f64"))]
 use crate::prelude::*;
 #[cfg(any(feature = "parry-f32", feature = "parry-f64"))]
 use crate::{
@@ -232,9 +234,7 @@ use core::cell::RefCell;
 #[cfg(any(feature = "parry-f32", feature = "parry-f64"))]
 use dynamics::solver::SolverDiagnostics;
 #[cfg(any(feature = "parry-f32", feature = "parry-f64"))]
-use parry::query::{
-    NonlinearRigidMotion, ShapeCastHit, ShapeCastOptions, cast_shapes, cast_shapes_nonlinear,
-};
+use parry::query::{NonlinearRigidMotion, ShapeCastHit, ShapeCastOptions};
 #[cfg(any(feature = "parry-f32", feature = "parry-f64"))]
 use thread_local::ThreadLocal;
 
@@ -596,6 +596,7 @@ fn solve_continuous(
     mut contact_graph: ResMut<ContactGraph>,
     time: Res<Time>,
     mut diagnostics: ResMut<SolverDiagnostics>,
+    query_dispatcher: Res<QueryDispatcher>,
 ) {
     let start = crate::utils::Instant::now();
 
@@ -823,7 +824,13 @@ fn solve_continuous(
                     // so far, record the details needed to clamp the body's normal motion and hand
                     // the contact off to the discrete solver next frame.
                     if let Some(hit) = compute_ccd_toi(
-                        sweep_mode, &motion1, collider1, &motion2, collider2, min_toi,
+                        &query_dispatcher,
+                        sweep_mode,
+                        &motion1,
+                        collider1,
+                        &motion2,
+                        collider2,
+                        min_toi,
                     ) {
                         min_toi = hit.time_of_impact.f32();
                         best_impact = Some(CcdImpact {
@@ -958,7 +965,9 @@ fn static_motion(pos: RVector, rot: impl Into<Rot>) -> NonlinearRigidMotion {
 ///
 /// Returns `None` if no impact is found within `min_toi`.
 #[cfg(any(feature = "parry-f32", feature = "parry-f64"))]
+#[expect(clippy::too_many_arguments)]
 fn compute_ccd_toi(
+    query_dispatcher: &QueryDispatcher,
     mode: SweepMode,
     motion1: &NonlinearRigidMotion,
     collider1: &Collider,
@@ -970,31 +979,33 @@ fn compute_ccd_toi(
     let shape2 = collider2.shape_scaled();
 
     let hit = if mode == SweepMode::Linear {
-        cast_shapes(
-            &motion1.start,
-            motion1.linvel,
-            shape1.as_ref(),
-            &motion2.start,
-            motion2.linvel,
-            shape2.as_ref(),
-            ShapeCastOptions {
-                max_time_of_impact: min_toi.real(),
-                stop_at_penetration: false,
-                ..default()
-            },
-        )
-        .ok()??
+        query_dispatcher
+            .cast_shapes(
+                &motion1.start,
+                motion1.linvel,
+                shape1.as_ref(),
+                &motion2.start,
+                motion2.linvel,
+                shape2.as_ref(),
+                ShapeCastOptions {
+                    max_time_of_impact: min_toi.real(),
+                    stop_at_penetration: false,
+                    ..default()
+                },
+            )
+            .ok()??
     } else {
-        cast_shapes_nonlinear(
-            motion1,
-            shape1.as_ref(),
-            motion2,
-            shape2.as_ref(),
-            0.0,
-            min_toi.real(),
-            false,
-        )
-        .ok()??
+        query_dispatcher
+            .cast_shapes_nonlinear(
+                motion1,
+                shape1.as_ref(),
+                motion2,
+                shape2.as_ref(),
+                0.0,
+                min_toi.real(),
+                false,
+            )
+            .ok()??
     };
 
     (hit.time_of_impact > 0.0 && hit.time_of_impact < min_toi.real()).then_some(hit)

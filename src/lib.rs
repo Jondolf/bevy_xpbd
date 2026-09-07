@@ -554,6 +554,9 @@ pub mod spatial_query;
 
 pub mod data_structures;
 
+mod dispatcher;
+pub use dispatcher::QueryDispatcher;
+
 // TODO: Where should this go?
 pub(crate) mod ancestor_marker;
 
@@ -571,7 +574,7 @@ pub mod prelude {
     };
     #[expect(deprecated)]
     pub use crate::{
-        PhysicsPlugins,
+        PhysicsPlugins, QueryDispatcher,
         collider_tree::{ColliderTreeOptimization, ColliderTreePlugin, TreeOptimizationMode},
         collision::prelude::*,
         dynamics::{self, prelude::*},

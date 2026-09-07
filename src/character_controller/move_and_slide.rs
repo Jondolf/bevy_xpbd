@@ -83,6 +83,8 @@ pub struct MoveAndSlide<'w, 's> {
     /// A units-per-meter scaling factor that adjusts some thresholds and tolerances
     /// to the scale of the world for better behavior.
     pub length_unit: Res<'w, PhysicsLengthUnit>,
+
+    pub query_dispatcher: Res<'w, QueryDispatcher>,
 }
 
 /// Configuration for [`MoveAndSlide::move_and_slide`].
@@ -1049,6 +1051,7 @@ impl<'w, 's> MoveAndSlide<'w, 's> {
             }
             let mut manifolds = Vec::new();
             contact_manifolds(
+                &self.query_dispatcher,
                 shape,
                 shape_position,
                 shape_rotation,

@@ -82,6 +82,7 @@ pub struct NarrowPhase<'w, 's, C: AnyCollider> {
     default_friction: Res<'w, DefaultFriction>,
     default_restitution: Res<'w, DefaultRestitution>,
     length_unit: Res<'w, PhysicsLengthUnit>,
+    query_dispatcher: Res<'w, QueryDispatcher>,
 }
 
 /// A bit vector for tracking contact status changes.
@@ -799,7 +800,8 @@ impl<C: AnyCollider> NarrowPhase<'_, '_, C> {
                 let context =
                     ColliderPairContext::new(collider1.entity, collider2.entity, collider_context);
                 collider1.shape.contact_manifolds_with_context(
-                    collider2.shape,
+                    &self.query_dispatcher,
+                    &collider2.shape,
                     collider1.position.0,
                     *collider1.rotation,
                     collider2.position.0,

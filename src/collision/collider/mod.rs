@@ -245,6 +245,7 @@ pub trait AnyCollider: Component<Mutability = Mutable> + ComputeMassProperties {
     /// See [`SimpleCollider::contact_manifolds`] for collider types with an empty [`AnyCollider::Context`].
     fn contact_manifolds_with_context(
         &self,
+        query_dispatcher: &QueryDispatcher,
         other: &Self,
         position1: RVector,
         rotation1: impl Into<Rot>,
@@ -330,6 +331,7 @@ pub trait SimpleCollider: AnyCollider<Context = ()> {
     /// See [`AnyCollider::contact_manifolds_with_context`] for collider types with a non-empty [`AnyCollider::Context`].
     fn contact_manifolds(
         &self,
+        query_dispatcher: &QueryDispatcher,
         other: &Self,
         position1: RVector,
         rotation1: impl Into<Rot>,
@@ -339,6 +341,7 @@ pub trait SimpleCollider: AnyCollider<Context = ()> {
         manifolds: &mut Vec<ContactManifold>,
     ) {
         self.contact_manifolds_with_context(
+            query_dispatcher,
             other,
             position1,
             rotation1,

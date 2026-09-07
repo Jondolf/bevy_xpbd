@@ -420,6 +420,7 @@ impl AnyCollider for Collider {
 
     fn contact_manifolds_with_context(
         &self,
+        query_dispatcher: &QueryDispatcher,
         other: &Self,
         position1: RVector,
         rotation1: impl Into<Rot>,
@@ -430,6 +431,7 @@ impl AnyCollider for Collider {
         _: ColliderPairContext<Self::Context>,
     ) {
         contact_query::contact_manifolds(
+            query_dispatcher,
             self,
             position1,
             rotation1,
