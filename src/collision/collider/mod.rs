@@ -178,6 +178,7 @@ pub trait AnyCollider: Component<Mutability = Mutable> + ComputeMassProperties {
     /// #
     ///     fn contact_manifolds_with_context(
     ///         &self,
+    ///         _query_dispatcher: &QueryDispatcher,
     ///         other: &Self,
     ///         position1: RVector,
     #[cfg_attr(feature = "2d", doc = "        rotation1: impl Into<Rot2>,")]
