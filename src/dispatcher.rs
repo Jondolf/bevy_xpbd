@@ -1,4 +1,5 @@
-//! Pluggable dispatch for the geometric queries between [`Collider`] shapes.
+//! Pluggable dispatch for the geometric queries between
+//! [`Collider`](crate::collision::collider::Collider) shapes.
 
 #[cfg(any(feature = "parry-f32", feature = "parry-f64"))]
 use crate::math::Real;
@@ -18,7 +19,7 @@ use parry::{
 ///
 /// By default the resource is empty and queries are dispatched with Parry's
 /// [`DefaultQueryDispatcher`], which supports every Parry built-in shape. To support
-/// a custom [`Shape`](parry::shape::Shape), install a dispatcher that recognizes the
+/// a custom [`Shape`], install a dispatcher that recognizes the
 /// custom shape — usually chained with the default dispatcher as a fallback.
 ///
 #[cfg_attr(any(feature = "parry-f32", feature = "parry-f64"), doc = "```no_run")]
