@@ -10,7 +10,8 @@ use bevy::{ecs::system::StaticSystemParam, prelude::*};
 
 use crate::{
     collision::collider::{
-        AnyCollider, ColliderContext, collider_hierarchy::RigidBodyColliders,
+        AnyCollider, ColliderContext,
+        collider_hierarchy::{ColliderOf, RigidBodyColliders},
         collider_transform::ColliderTransform,
     },
     dynamics::rigid_body::mass_properties::components::ComputedCenterOfMass,
@@ -82,32 +83,30 @@ impl<C: AnyCollider> Plugin for BodySizeMetricsPlugin<C> {
     }
 }
 
+type BodySizeMetricsData = (
+    &'static mut BodySizeMetrics,
+    &'static RigidBodyColliders,
+    &'static ComputedCenterOfMass,
+);
+
 fn update_body_size_metrics<C: AnyCollider>(
-    mut bodies: Query<(
-        &mut BodySizeMetrics,
-        &RigidBodyColliders,
-        Ref<ComputedCenterOfMass>,
+    // Body size metrics only need updating when the center of mass
+    // or one of the colliders changes.
+    mut bodies: ParamSet<(
+        Query<BodySizeMetricsData, Changed<ComputedCenterOfMass>>,
+        Query<BodySizeMetricsData>,
     )>,
     colliders: Query<(Entity, &C, &ColliderTransform)>,
-    changed_colliders: Query<(), Or<(Changed<C>, Changed<ColliderTransform>)>>,
+    changed_colliders: Query<&ColliderOf, Or<(Changed<C>, Changed<ColliderTransform>)>>,
     context: StaticSystemParam<C::Context>,
 ) {
     let context = context.into_inner();
 
-    for (mut size_metrics, rb_colliders, com) in bodies.iter_mut() {
-        if !com.is_changed()
-            && !rb_colliders
-                .iter()
-                .any(|collider_entity| changed_colliders.contains(collider_entity))
-        {
-            // Neither the center of mass nor any of the colliders have changed.
-            continue;
-        }
-
+    // Computes the minimum CCD thickness and maximum sweep radius over a body's colliders.
+    let compute = |rb_colliders: &RigidBodyColliders, com: &ComputedCenterOfMass| {
         let mut ccd_thickness: f32 = f32::INFINITY;
         let mut sweep_radius: f32 = 0.0;
 
-        // Find the minimum CCD thickness and maximum sweep radius.
         for (entity, collider, collider_transform) in colliders.iter_many(rb_colliders) {
             // Compute the CCD thickness
             let ctx = ColliderContext::new(entity, &context);
@@ -121,7 +120,26 @@ fn update_body_size_metrics<C: AnyCollider>(
             sweep_radius = sweep_radius.max(distance_to_com);
         }
 
-        size_metrics.ccd_thickness = ccd_thickness;
-        size_metrics.sweep_radius = sweep_radius;
+        BodySizeMetrics {
+            ccd_thickness,
+            sweep_radius,
+        }
+    };
+
+    // Bodies whose center of mass changed.
+    for (mut size_metrics, rb_colliders, com) in &mut bodies.p0() {
+        *size_metrics = compute(rb_colliders, com);
+    }
+
+    // Bodies with a collider that changed. Note that bodies may be visited
+    // multiple times, but the end result will be the same.
+    if changed_colliders.is_empty() {
+        return;
+    }
+    let mut all_bodies = bodies.p1();
+    for collider_of in &changed_colliders {
+        if let Ok((mut size_metrics, rb_colliders, com)) = all_bodies.get_mut(collider_of.body) {
+            *size_metrics = compute(rb_colliders, com);
+        }
     }
 }

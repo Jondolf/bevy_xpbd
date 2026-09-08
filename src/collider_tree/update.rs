@@ -21,7 +21,7 @@ use bevy::{
         query::QueryFilter,
         system::{StaticSystemParam, SystemChangeTick},
     },
-    platform::collections::HashSet,
+    platform::collections::HashMap,
     prelude::*,
 };
 use obvhs::aabb::Aabb;
@@ -420,6 +420,7 @@ fn add_to_tree_on<E: EntityEvent, B: Bundle, F: QueryFilter>(
             Has<Sensor>,
             Has<CollisionEventsEnabled>,
             Option<&ActiveCollisionHooks>,
+            Has<RigidBody>,
         ),
         F,
     >,
@@ -436,10 +437,18 @@ fn add_to_tree_on<E: EntityEvent, B: Bundle, F: QueryFilter>(
         is_sensor,
         has_contact_events,
         active_hooks,
+        is_body,
     )) = collider_query.get_mut(entity)
     else {
         return;
     };
+
+    // If the collider is on the same entity as a rigid body but does not have `ColliderOf` yet,
+    // it is about to be inserted by the `ColliderHierarchyPlugin`. Adding it to the standalone tree
+    // here would just be undone, so we wait for the `ColliderOf` insertion instead.
+    if is_body && collider_of.is_none() && *proxy_key == ColliderTreeProxyKey::PLACEHOLDER {
+        return;
+    }
 
     let (tree_type, is_body_disabled) =
         if let Some(Ok((rb, disabled))) = collider_of.map(|c| body_query.get(c.body)) {
@@ -464,6 +473,18 @@ fn add_to_tree_on<E: EntityEvent, B: Bundle, F: QueryFilter>(
     if *proxy_key != ColliderTreeProxyKey::PLACEHOLDER {
         let old_tree_type = proxy_key.tree_type();
         let old_tree = trees.tree_for_type_mut(old_tree_type);
+
+        // If the collider is already in the right tree, update the existing proxy in place.
+        if old_tree_type == tree_type
+            && let Some(old_proxy) = old_tree.get_proxy_mut(proxy_key.id())
+        {
+            *old_proxy = proxy;
+            old_tree.resize_proxy_aabb(proxy_key.id(), Aabb::from(enlarged_aabb.get()));
+            moved_proxies.insert(*proxy_key);
+            old_tree.moved_proxies.push(proxy_key.id());
+            return;
+        }
+
         old_tree.remove_proxy(proxy_key.id());
         moved_proxies.remove(&proxy_key);
     }
@@ -520,8 +541,8 @@ struct LastDynamicKinematicAabbUpdate(Tick);
 pub struct MovedProxies {
     /// A vector of moved proxy keys.
     proxies: Vec<ColliderTreeProxyKey>,
-    /// A set of moved proxy keys for quick lookup.
-    set: HashSet<ColliderTreeProxyKey>,
+    /// Maps a moved proxy key to its index in `proxies`.
+    indices: HashMap<ColliderTreeProxyKey, u32>,
 }
 
 impl MovedProxies {
@@ -536,7 +557,7 @@ impl MovedProxies {
     /// Returns `true` if the proxy with the given key has moved.
     #[inline]
     pub fn contains(&self, proxy_key: ColliderTreeProxyKey) -> bool {
-        self.set.contains(&proxy_key)
+        self.indices.contains_key(&proxy_key)
     }
 
     /// Inserts a moved proxy key.
@@ -544,7 +565,8 @@ impl MovedProxies {
     /// Returns `true` if the proxy key was not already present.
     #[inline]
     pub fn insert(&mut self, proxy_key: ColliderTreeProxyKey) -> bool {
-        if self.set.insert(proxy_key) {
+        let index = self.proxies.len() as u32;
+        if self.indices.try_insert(proxy_key, index).is_ok() {
             self.proxies.push(proxy_key);
             true
         } else {
@@ -552,16 +574,21 @@ impl MovedProxies {
         }
     }
 
-    /// Removes a moved proxy key. This uses a linear search,
-    /// and may change the order of the remaining keys.
+    /// Removes a moved proxy key. This may change the order of the remaining keys.
     ///
     /// If the proxy key is not present, nothing happens.
     #[inline]
     pub fn remove(&mut self, proxy_key: &ColliderTreeProxyKey) {
-        if self.set.remove(proxy_key)
-            && let Some(pos) = self.proxies.iter().position(|k| k == proxy_key)
-        {
-            self.proxies.swap_remove(pos);
+        let Some(index) = self.indices.remove(proxy_key) else {
+            return;
+        };
+
+        let index = index as usize;
+        self.proxies.swap_remove(index);
+
+        // The key that was swapped into the removed slot needs its index updated.
+        if let Some(swapped) = self.proxies.get(index) {
+            self.indices.insert(*swapped, index as u32);
         }
     }
 
@@ -569,7 +596,7 @@ impl MovedProxies {
     #[inline]
     pub fn clear(&mut self) {
         self.proxies.clear();
-        self.set.clear();
+        self.indices.clear();
     }
 }
 
@@ -812,27 +839,13 @@ fn update_solver_body_aabbs<C: AnyCollider>(
     // Update the AABBs of moved proxies in the dynamic and kinematic trees.
     let aabb_query = colliders.p1();
     for &tree_type in &[ColliderTreeType::Dynamic, ColliderTreeType::Kinematic] {
-        let tree = trees.tree_for_type_mut(tree_type);
-        let bit_vec = enlarged_proxies.bit_vec_for_type_mut(tree_type);
-
-        tree.bvh.init_primitives_to_nodes_if_uninit();
-        bit_vec.combine_thread_local();
-
-        update_tree(
+        update_tree_for_moved_proxies(
             tree_type,
-            tree,
-            &bit_vec.global,
+            trees.tree_for_type_mut(tree_type),
+            enlarged_proxies.bit_vec_for_type_mut(tree_type),
             &aabb_query,
             &mut moved_proxies,
-            |tree, proxy_id, enlarged_aabb| {
-                tree.set_proxy_aabb(proxy_id, enlarged_aabb);
-            },
         );
-
-        // Refit the BVH after enlarging proxies.
-        // TODO: For a smaller number of moved proxies, it can be faster
-        //       to only refit upwards from the moved leaves.
-        tree.refit_all();
     }
 
     // Update the last update tick.
@@ -970,49 +983,71 @@ pub fn update_moved_collider_aabbs<C: AnyCollider>(
     // Reinsert moved proxies in each tree.
     let aabb_query = colliders.p1();
     for tree_type in ColliderTreeType::ALL {
-        let tree = trees.tree_for_type_mut(tree_type);
-        let bit_vec = enlarged_proxies.bit_vec_for_type_mut(tree_type);
-
-        tree.bvh.init_primitives_to_nodes_if_uninit();
-        bit_vec.combine_thread_local();
-
-        let moved_count = bit_vec.global.count_ones();
-        let moved_ratio = if tree.proxies.is_empty() {
-            0.0
-        } else {
-            moved_count as f32 / tree.proxies.len() as f32
-        };
-
-        // For a small number of moved proxies, it's more efficient to refit up from just those leaves.
-        // Otherwise, it's better to refit the entire tree once after updating all moved proxies.
-        // TODO: Tune the threshold ratio.
-        if moved_ratio < 0.1 {
-            update_tree(
-                tree_type,
-                tree,
-                &bit_vec.global,
-                &aabb_query,
-                &mut moved_proxies,
-                |tree, proxy_id, enlarged_aabb| {
-                    tree.resize_proxy_aabb(proxy_id, enlarged_aabb);
-                },
-            );
-        } else {
-            update_tree(
-                tree_type,
-                tree,
-                &bit_vec.global,
-                &aabb_query,
-                &mut moved_proxies,
-                |tree, proxy_id, enlarged_aabb| {
-                    tree.set_proxy_aabb(proxy_id, enlarged_aabb);
-                },
-            );
-            tree.refit_all();
-        }
+        update_tree_for_moved_proxies(
+            tree_type,
+            trees.tree_for_type_mut(tree_type),
+            enlarged_proxies.bit_vec_for_type_mut(tree_type),
+            &aabb_query,
+            &mut moved_proxies,
+        );
     }
 
     diagnostics.update += start.elapsed();
+}
+
+/// Applies the [`EnlargedAabb`]s of the proxies flagged in `bit_vec` to the tree,
+/// and refits the BVH to account for the changes.
+fn update_tree_for_moved_proxies(
+    tree_type: ColliderTreeType,
+    tree: &mut ColliderTree,
+    bit_vec: &mut EnlargedProxiesBitVec,
+    aabb_query: &Query<&EnlargedAabb, Without<ColliderDisabled>>,
+    moved_proxies: &mut MovedProxies,
+) {
+    tree.bvh.init_primitives_to_nodes_if_uninit();
+    bit_vec.combine_thread_local();
+
+    let moved_count = bit_vec.global.count_ones();
+    if moved_count == 0 {
+        return;
+    }
+    let moved_ratio = moved_count as f32 / tree.proxies.len().max(1) as f32;
+
+    // For a small number of moved proxies, it's more efficient to refit up from just those leaves.
+    // Otherwise, it's better to refit the entire tree once after updating all moved proxies.
+    //
+    // The crossover depends on whether the BVH nodes are currently ordered with children after parents.
+    // If they are, `refit_all` is significantly cheaper. This is the case after full rebuilds.
+    let full_refit_threshold = if tree.bvh.children_are_ordered_after_parents {
+        0.06
+    } else {
+        0.3
+    };
+
+    if moved_ratio < full_refit_threshold {
+        update_tree(
+            tree_type,
+            tree,
+            &bit_vec.global,
+            aabb_query,
+            moved_proxies,
+            |tree, proxy_id, enlarged_aabb| {
+                tree.resize_proxy_aabb(proxy_id, enlarged_aabb);
+            },
+        );
+    } else {
+        update_tree(
+            tree_type,
+            tree,
+            &bit_vec.global,
+            aabb_query,
+            moved_proxies,
+            |tree, proxy_id, enlarged_aabb| {
+                tree.set_proxy_aabb(proxy_id, enlarged_aabb);
+            },
+        );
+        tree.refit_all();
+    }
 }
 
 /// Updates the collider tree for the moved proxies indicated in the given bit vector.
