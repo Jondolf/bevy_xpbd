@@ -14,10 +14,9 @@ use parry::{
     shape::Shape,
 };
 
-/// The dispatcher used for all pairwise geometric queries between [`Collider`] shapes.
+/// The Bevy resource specifying the dispatcher used for all pairwise geometric queries.
 ///
-/// Every pairwise shape query Avian performs runs through the [`QueryDispatcher`]
-/// resource. By default the resource is empty and queries are dispatched with Parry's
+/// By default the resource is empty and queries are dispatched with Parry's
 /// [`DefaultQueryDispatcher`], which supports every Parry built-in shape. To support
 /// a custom [`Shape`](parry::shape::Shape), install a dispatcher that recognizes the
 /// custom shape — usually chained with the default dispatcher as a fallback.
@@ -49,17 +48,6 @@ use parry::{
 ///         .run();
 /// }
 /// ```
-///
-/// The [`Default`] value holds no custom dispatcher and dispatches with Parry's
-/// [`DefaultQueryDispatcher`]; it is initialized automatically by the
-/// [`ColliderBackendPlugin`](crate::collision::collider::ColliderBackendPlugin). Override
-/// it — at startup or at any later point — by inserting a new value with
-/// [`App::insert_resource`](bevy::app::App::insert_resource) or
-/// [`Commands::insert_resource`](bevy::ecs::system::Commands::insert_resource); the
-/// replacement takes effect for all subsequent queries. Being a regular resource, each
-/// [`World`](bevy::ecs::world::World) has its own dispatcher.
-///
-/// [`Collider`]: crate::collision::collider::Collider
 #[derive(Resource, Default)]
 pub struct QueryDispatcher(
     #[cfg(any(feature = "parry-f32", feature = "parry-f64"))]
@@ -90,11 +78,6 @@ macro_rules! dispatch_query {
 
 #[cfg(any(feature = "parry-f32", feature = "parry-f64"))]
 impl QueryDispatcher {
-    // The world-space methods below mirror Parry's free query functions
-    // (`parry::query::contact` etc.), which hardcode `DefaultQueryDispatcher`, but route
-    // through the installed dispatcher instead. Like Parry's functions, they take one
-    // world-space pose per shape and return results in the same spaces Parry's would.
-
     /// Computes one pair of contact points between two shapes, like
     /// [`parry::query::contact`](fn@parry::query::contact) but routed through the installed dispatcher.
     ///
