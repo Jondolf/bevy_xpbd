@@ -801,7 +801,7 @@ impl<C: AnyCollider> NarrowPhase<'_, '_, C> {
                     ColliderPairContext::new(collider1.entity, collider2.entity, collider_context);
                 collider1.shape.contact_manifolds_with_context(
                     &self.query_dispatcher,
-                    &collider2.shape,
+                    collider2.shape,
                     collider1.position.0,
                     *collider1.rotation,
                     collider2.position.0,

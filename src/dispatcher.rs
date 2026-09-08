@@ -1,37 +1,9 @@
 //! Pluggable dispatch for the geometric queries between [`Collider`] shapes.
-//!
-//! Every pairwise shape query Avian performs runs through the [`QueryDispatcher`]
-//! resource. By default the resource is empty and queries are dispatched with Parry's
-//! [`DefaultQueryDispatcher`], which supports every Parry built-in shape. To support
-//! a custom [`Shape`](parry::shape::Shape), install a dispatcher that recognizes the
-//! custom shape — usually chained with the default dispatcher as a fallback.
-//!
-//! ```no_run
-#![cfg_attr(feature = "2d", doc = "# use avian2d::prelude::*;")]
-#![cfg_attr(feature = "3d", doc = "# use avian3d::prelude::*;")]
-#![cfg_attr(
-    feature = "2d",
-    doc = "use avian2d::parry::query::DefaultQueryDispatcher;"
-)]
-#![cfg_attr(
-    feature = "3d",
-    doc = "use avian3d::parry::query::DefaultQueryDispatcher;"
-)]
-//! use bevy::prelude::*;
-//!
-//! fn main() {
-//!     App::new()
-//!         .add_plugins((DefaultPlugins, PhysicsPlugins::default()))
-//!         // A real application would chain its own dispatcher in front, e.g.
-//!         // `MyVoxelDispatcher.chain(DefaultQueryDispatcher)`; installing the
-//!         // default explicitly is shown here for brevity.
-//!         .insert_resource(QueryDispatcher::new(Box::new(DefaultQueryDispatcher)))
-//!         .run();
-//! }
-//! ```
 
+#[cfg(any(feature = "parry-f32", feature = "parry-f64"))]
 use crate::math::Real;
 use bevy::ecs::resource::Resource;
+#[cfg(any(feature = "parry-f32", feature = "parry-f64"))]
 use parry::{
     math::{Pose, Vector},
     query::{
@@ -44,7 +16,39 @@ use parry::{
 
 /// The dispatcher used for all pairwise geometric queries between [`Collider`] shapes.
 ///
-/// See the [module documentation](self) for an overview and an installation example.
+/// Every pairwise shape query Avian performs runs through the [`QueryDispatcher`]
+/// resource. By default the resource is empty and queries are dispatched with Parry's
+/// [`DefaultQueryDispatcher`], which supports every Parry built-in shape. To support
+/// a custom [`Shape`](parry::shape::Shape), install a dispatcher that recognizes the
+/// custom shape — usually chained with the default dispatcher as a fallback.
+///
+#[cfg_attr(any(feature = "parry-f32", feature = "parry-f64"), doc = "```no_run")]
+#[cfg_attr(
+    not(any(feature = "parry-f32", feature = "parry-f64")),
+    doc = "```ignore"
+)]
+#[cfg_attr(feature = "2d", doc = "# use avian2d::prelude::*;")]
+#[cfg_attr(feature = "3d", doc = "# use avian3d::prelude::*;")]
+#[cfg_attr(
+    feature = "2d",
+    doc = "use avian2d::parry::query::DefaultQueryDispatcher;"
+)]
+#[cfg_attr(
+    feature = "3d",
+    doc = "use avian3d::parry::query::DefaultQueryDispatcher;"
+)]
+/// use bevy::prelude::*;
+///
+/// fn main() {
+///     App::new()
+///         .add_plugins((DefaultPlugins, PhysicsPlugins::default()))
+///         // A real application would chain its own dispatcher in front, e.g.
+///         // `MyVoxelDispatcher.chain(DefaultQueryDispatcher)`; installing the
+///         // default explicitly is shown here for brevity.
+///         .insert_resource(QueryDispatcher::new(Box::new(DefaultQueryDispatcher)))
+///         .run();
+/// }
+/// ```
 ///
 /// The [`Default`] value holds no custom dispatcher and dispatches with Parry's
 /// [`DefaultQueryDispatcher`]; it is initialized automatically by the
@@ -57,8 +61,12 @@ use parry::{
 ///
 /// [`Collider`]: crate::collision::collider::Collider
 #[derive(Resource, Default)]
-pub struct QueryDispatcher(Option<Box<dyn PersistentQueryDispatcher<(), ()>>>);
+pub struct QueryDispatcher(
+    #[cfg(any(feature = "parry-f32", feature = "parry-f64"))]
+    Option<Box<dyn PersistentQueryDispatcher<(), ()>>>,
+);
 
+#[cfg(any(feature = "parry-f32", feature = "parry-f64"))]
 impl QueryDispatcher {
     /// Creates a resource dispatching queries with `dispatcher`.
     ///
@@ -70,6 +78,7 @@ impl QueryDispatcher {
     }
 }
 
+#[cfg(any(feature = "parry-f32", feature = "parry-f64"))]
 macro_rules! dispatch_query {
     ($query_dispatcher:expr, $method:ident, $($arg:expr),+) => {
         match $query_dispatcher.0 {
@@ -79,6 +88,7 @@ macro_rules! dispatch_query {
     };
 }
 
+#[cfg(any(feature = "parry-f32", feature = "parry-f64"))]
 impl QueryDispatcher {
     // The world-space methods below mirror Parry's free query functions
     // (`parry::query::contact` etc.), which hardcode `DefaultQueryDispatcher`, but route
@@ -86,7 +96,7 @@ impl QueryDispatcher {
     // world-space pose per shape and return results in the same spaces Parry's would.
 
     /// Computes one pair of contact points between two shapes, like
-    /// [`parry::query::contact`] but routed through the installed dispatcher.
+    /// [`parry::query::contact`](fn@parry::query::contact) but routed through the installed dispatcher.
     ///
     /// Returns `None` if the shapes are separated by a distance greater than
     /// `prediction`, and [`Unsupported`] if the dispatcher doesn't handle this shape
@@ -159,7 +169,7 @@ impl QueryDispatcher {
     }
 
     /// Computes the closest points between two shapes, like
-    /// [`parry::query::closest_points`] but routed through the installed dispatcher.
+    /// [`parry::query::closest_points`](fn@parry::query::closest_points) but routed through the installed dispatcher.
     ///
     /// Returns [`ClosestPoints::Disjoint`] if the shapes are separated by a distance
     /// greater than `max_dist`. The points are expressed in world space.

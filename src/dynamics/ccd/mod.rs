@@ -216,7 +216,6 @@
 
 #[cfg(any(feature = "parry-f32", feature = "parry-f64"))]
 use super::solver::solver_body::{SolverBodies, SolverBody, SolverBodyFlags, SolverBodyIndex};
-#[cfg(any(feature = "parry-f32", feature = "parry-f64"))]
 use crate::QueryDispatcher;
 #[cfg(any(feature = "parry-f32", feature = "parry-f64"))]
 use crate::prelude::*;
@@ -242,11 +241,9 @@ use thread_local::ThreadLocal;
 pub struct CcdPlugin;
 
 impl Plugin for CcdPlugin {
-    #[cfg_attr(
-        not(any(feature = "parry-f32", feature = "parry-f64")),
-        expect(unused_variables)
-    )]
     fn build(&self, app: &mut App) {
+        app.init_resource::<QueryDispatcher>();
+
         // Get the `PhysicsSchedule`, and panic if it doesn't exist.
         #[cfg(any(feature = "parry-f32", feature = "parry-f64"))]
         let physics = app
@@ -965,7 +962,6 @@ fn static_motion(pos: RVector, rot: impl Into<Rot>) -> NonlinearRigidMotion {
 ///
 /// Returns `None` if no impact is found within `min_toi`.
 #[cfg(any(feature = "parry-f32", feature = "parry-f64"))]
-#[expect(clippy::too_many_arguments)]
 fn compute_ccd_toi(
     query_dispatcher: &QueryDispatcher,
     mode: SweepMode,

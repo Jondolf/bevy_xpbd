@@ -84,6 +84,7 @@ pub struct MoveAndSlide<'w, 's> {
     /// to the scale of the world for better behavior.
     pub length_unit: Res<'w, PhysicsLengthUnit>,
 
+    /// The [`QueryDispatcher`] used for shape queries between the character and other colliders.
     pub query_dispatcher: Res<'w, QueryDispatcher>,
 }
 
