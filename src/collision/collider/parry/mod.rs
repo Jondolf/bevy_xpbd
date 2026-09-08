@@ -1756,7 +1756,10 @@ fn scale_shape(
                     }
                 }
             }
-            Err(parry::query::Unsupported)
+            _shape
+                .scale_dyn(scale, num_subdivisions)
+                .map(|scaled| SharedShape(alloc::sync::Arc::from(scaled)))
+                .ok_or(parry::query::Unsupported)
         }
     }
 }
