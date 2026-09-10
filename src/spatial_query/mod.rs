@@ -198,6 +198,8 @@ impl Default for SpatialQueryPlugin {
 
 impl Plugin for SpatialQueryPlugin {
     fn build(&self, app: &mut App) {
+        app.init_resource::<QueryDispatcher>();
+
         app.configure_sets(
             self.schedule,
             SpatialQuerySystems.after(TransformSystems::Propagate),

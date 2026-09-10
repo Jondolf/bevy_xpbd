@@ -414,8 +414,7 @@ pub mod test {
 
     #[cfg(feature = "2d")]
     impl QuasiRandomDirection {
-        #[allow(clippy::excessive_precision)]
-        const GOLDEN: f32 = 1.61803398875;
+        const GOLDEN: f32 = core::f32::consts::GOLDEN_RATIO;
         const INV_GOLDEN: f32 = 1.0 / Self::GOLDEN;
     }
 

@@ -16,7 +16,7 @@
 
 use crate::{collision::contact_types::SingleContact, prelude::*};
 use bevy::prelude::*;
-use parry::query::{PersistentQueryDispatcher, ShapeCastOptions, Unsupported};
+use parry::query::{ShapeCastOptions, Unsupported};
 
 /// An error indicating that a [contact query](self) is not supported for one of the [`Collider`] shapes.
 pub type UnsupportedShape = Unsupported;
@@ -42,6 +42,7 @@ pub type UnsupportedShape = Unsupported;
 ///
 /// // Compute a contact that should have a penetration depth of 0.5
 /// let contact = contact(
+///     &QueryDispatcher::default(),
 ///     // First collider
 ///     &collider1,
 ///     RVec3::default(),
@@ -62,6 +63,7 @@ pub type UnsupportedShape = Unsupported;
 /// # }
 /// ```
 pub fn contact(
+    query_dispatcher: &QueryDispatcher,
     collider1: &Collider,
     position1: RVector,
     rotation1: impl Into<Rot>,
@@ -75,39 +77,40 @@ pub fn contact(
     let isometry1 = make_pose(position1, rotation1);
     let isometry2 = make_pose(position2, rotation2);
 
-    parry::query::contact(
-        &isometry1,
-        collider1.shape_scaled().0.as_ref(),
-        &isometry2,
-        collider2.shape_scaled().0.as_ref(),
-        prediction_distance.real(),
-    )
-    .map(|contact| {
-        if let Some(contact) = contact {
-            // Transform contact data into local space
-            let inv_rotation1 = rotation1.inverse();
-            let inv_rotation2 = rotation2.inverse();
-            let point1: Vector = inv_rotation1 * contact.point1.f32();
-            let point2: Vector = inv_rotation2 * contact.point2.f32();
-            let normal1: Vector = (inv_rotation1 * contact.normal1.f32()).normalize();
-            let normal2: Vector = (inv_rotation2 * contact.normal2.f32()).normalize();
+    query_dispatcher
+        .contact(
+            &isometry1,
+            collider1.shape_scaled().0.as_ref(),
+            &isometry2,
+            collider2.shape_scaled().0.as_ref(),
+            prediction_distance.real(),
+        )
+        .map(|contact| {
+            if let Some(contact) = contact {
+                // Transform contact data into local space
+                let inv_rotation1 = rotation1.inverse();
+                let inv_rotation2 = rotation2.inverse();
+                let point1: Vector = inv_rotation1 * contact.point1.f32();
+                let point2: Vector = inv_rotation2 * contact.point2.f32();
+                let normal1: Vector = (inv_rotation1 * contact.normal1.f32()).normalize();
+                let normal2: Vector = (inv_rotation2 * contact.normal2.f32()).normalize();
 
-            // Make sure the normals are valid
-            if !normal1.is_normalized() || !normal2.is_normalized() {
-                return None;
+                // Make sure the normals are valid
+                if !normal1.is_normalized() || !normal2.is_normalized() {
+                    return None;
+                }
+
+                Some(SingleContact::new(
+                    point1,
+                    point2,
+                    normal1,
+                    normal2,
+                    -contact.dist.f32(),
+                ))
+            } else {
+                None
             }
-
-            Some(SingleContact::new(
-                point1,
-                point2,
-                normal1,
-                normal2,
-                -contact.dist.f32(),
-            ))
-        } else {
-            None
-        }
-    })
+        })
 }
 
 // TODO: Add a persistent version of this that tries to reuse previous contact manifolds
@@ -138,6 +141,7 @@ pub fn contact(
 /// // Compute contact manifolds a collision that should be penetrating
 /// let mut manifolds = Vec::new();
 /// contact_manifolds(
+///     &QueryDispatcher::default(),
 ///     // First collider
 ///     &collider1,
 ///     RVec3::default(),
@@ -156,6 +160,7 @@ pub fn contact(
 /// # }
 /// ```
 pub fn contact_manifolds(
+    query_dispatcher: &QueryDispatcher,
     collider1: &Collider,
     position1: RVector,
     rotation1: impl Into<Rot>,
@@ -176,7 +181,7 @@ pub fn contact_manifolds(
     // TODO: Reuse manifolds from previous frame to improve performance
     let mut new_manifolds =
         Vec::<parry::query::ContactManifold<(), ()>>::with_capacity(manifolds.len());
-    let result = parry::query::DefaultQueryDispatcher.contact_manifolds(
+    let result = query_dispatcher.contact_manifolds(
         &isometry12,
         collider1.shape_scaled().0.as_ref(),
         collider2.shape_scaled().0.as_ref(),
@@ -299,6 +304,7 @@ pub enum ClosestPoints {
 /// // The shapes are intersecting
 /// assert_eq!(
 ///     closest_points(
+///         &QueryDispatcher::default(),
 ///         &collider1,
 ///         RVec3::default(),
 ///         Quat::default(),
@@ -314,6 +320,7 @@ pub enum ClosestPoints {
 /// // The shapes are not intersecting but the distance between the closest points is below 2.0
 /// assert_eq!(
 ///     closest_points(
+///         &QueryDispatcher::default(),
 ///         &collider1,
 ///         RVec3::default(),
 ///         Quat::default(),
@@ -329,6 +336,7 @@ pub enum ClosestPoints {
 /// // The shapes are not intersecting and the distance between the closest points exceeds 2.0
 /// assert_eq!(
 ///     closest_points(
+///         &QueryDispatcher::default(),
 ///         &collider1,
 ///         RVec3::default(),
 ///         Quat::default(),
@@ -343,6 +351,7 @@ pub enum ClosestPoints {
 /// # }
 /// ```
 pub fn closest_points(
+    query_dispatcher: &QueryDispatcher,
     collider1: &Collider,
     position1: RVector,
     rotation1: impl Into<Rot>,
@@ -356,20 +365,21 @@ pub fn closest_points(
     let isometry1 = make_pose(position1, rotation1);
     let isometry2 = make_pose(position2, rotation2);
 
-    parry::query::closest_points(
-        &isometry1,
-        collider1.shape_scaled().0.as_ref(),
-        &isometry2,
-        collider2.shape_scaled().0.as_ref(),
-        max_distance.real(),
-    )
-    .map(|closest_points| match closest_points {
-        parry::query::ClosestPoints::Intersecting => ClosestPoints::Intersecting,
-        parry::query::ClosestPoints::WithinMargin(point1, point2) => {
-            ClosestPoints::WithinMargin(point1, point2)
-        }
-        parry::query::ClosestPoints::Disjoint => ClosestPoints::OutsideMargin,
-    })
+    query_dispatcher
+        .closest_points(
+            &isometry1,
+            collider1.shape_scaled().0.as_ref(),
+            &isometry2,
+            collider2.shape_scaled().0.as_ref(),
+            max_distance.real(),
+        )
+        .map(|closest_points| match closest_points {
+            parry::query::ClosestPoints::Intersecting => ClosestPoints::Intersecting,
+            parry::query::ClosestPoints::WithinMargin(point1, point2) => {
+                ClosestPoints::WithinMargin(point1, point2)
+            }
+            parry::query::ClosestPoints::Disjoint => ClosestPoints::OutsideMargin,
+        })
 }
 
 /// Computes the minimum distance separating two [`Collider`]s.
@@ -394,6 +404,7 @@ pub fn closest_points(
 /// // The distance is 1.0
 /// assert_eq!(
 ///     distance(
+///         &QueryDispatcher::default(),
 ///         &collider1,
 ///         RVec3::default(),
 ///         Quat::default(),
@@ -408,6 +419,7 @@ pub fn closest_points(
 /// // The colliders are penetrating, so the distance is 0.0
 /// assert_eq!(
 ///     distance(
+///         &QueryDispatcher::default(),
 ///         &collider1,
 ///         RVec3::default(),
 ///         Quat::default(),
@@ -421,6 +433,7 @@ pub fn closest_points(
 /// # }
 /// ```
 pub fn distance(
+    query_dispatcher: &QueryDispatcher,
     collider1: &Collider,
     position1: RVector,
     rotation1: impl Into<Rot>,
@@ -433,13 +446,14 @@ pub fn distance(
     let isometry1 = make_pose(position1, rotation1);
     let isometry2 = make_pose(position2, rotation2);
 
-    parry::query::distance(
-        &isometry1,
-        collider1.shape_scaled().0.as_ref(),
-        &isometry2,
-        collider2.shape_scaled().0.as_ref(),
-    )
-    .map(|distance| distance.f32())
+    query_dispatcher
+        .distance(
+            &isometry1,
+            collider1.shape_scaled().0.as_ref(),
+            &isometry2,
+            collider2.shape_scaled().0.as_ref(),
+        )
+        .map(|distance| distance.f32())
 }
 
 /// Tests whether two [`Collider`]s are intersecting each other.
@@ -463,6 +477,7 @@ pub fn distance(
 /// // These colliders should be intersecting
 /// assert_eq!(
 ///     intersection_test(
+///         &QueryDispatcher::default(),
 ///         &collider1,
 ///         RVec3::default(),
 ///         Quat::default(),
@@ -477,6 +492,7 @@ pub fn distance(
 /// // These colliders shouldn't be intersecting
 /// assert_eq!(
 ///     intersection_test(
+///         &QueryDispatcher::default(),
 ///         &collider1,
 ///         RVec3::default(),
 ///         Quat::default(),
@@ -490,6 +506,7 @@ pub fn distance(
 /// # }
 /// ```
 pub fn intersection_test(
+    query_dispatcher: &QueryDispatcher,
     collider1: &Collider,
     position1: RVector,
     rotation1: impl Into<Rot>,
@@ -502,7 +519,7 @@ pub fn intersection_test(
     let isometry1 = make_pose(position1, rotation1);
     let isometry2 = make_pose(position2, rotation2);
 
-    parry::query::intersection_test(
+    query_dispatcher.intersection_test(
         &isometry1,
         collider1.shape_scaled().0.as_ref(),
         &isometry2,
@@ -554,6 +571,7 @@ pub struct TimeOfImpact {
 /// let collider2 = Collider::cuboid(1.0, 1.0, 1.0);
 ///
 /// let result = time_of_impact(
+///     &QueryDispatcher::default(),
 ///     &collider1,         // Collider 1
 ///     RVec3::NEG_X * 5.0, // Position 1
 ///     Quat::default(),    // Rotation 1
@@ -571,6 +589,7 @@ pub struct TimeOfImpact {
 /// ```
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub fn time_of_impact(
+    query_dispatcher: &QueryDispatcher,
     collider1: &Collider,
     position1: RVector,
     rotation1: impl Into<Rot>,
@@ -587,27 +606,28 @@ pub fn time_of_impact(
     let isometry1 = make_pose(position1, rotation1);
     let isometry2 = make_pose(position2, rotation2);
 
-    parry::query::cast_shapes(
-        &isometry1,
-        velocity1.real(),
-        collider1.shape_scaled().0.as_ref(),
-        &isometry2,
-        velocity2.real(),
-        collider2.shape_scaled().0.as_ref(),
-        ShapeCastOptions {
-            max_time_of_impact: max_time_of_impact.real(),
-            stop_at_penetration: true,
-            ..default()
-        },
-    )
-    .map(|toi| {
-        toi.map(|toi| TimeOfImpact {
-            time_of_impact: toi.time_of_impact.f32(),
-            point1: toi.witness1.f32(),
-            point2: toi.witness2.f32(),
-            normal1: toi.normal1.f32(),
-            normal2: toi.normal2.f32(),
-            status: toi.status,
+    query_dispatcher
+        .cast_shapes(
+            &isometry1,
+            velocity1.real(),
+            collider1.shape_scaled().0.as_ref(),
+            &isometry2,
+            velocity2.real(),
+            collider2.shape_scaled().0.as_ref(),
+            ShapeCastOptions {
+                max_time_of_impact: max_time_of_impact.real(),
+                stop_at_penetration: true,
+                ..default()
+            },
+        )
+        .map(|toi| {
+            toi.map(|toi| TimeOfImpact {
+                time_of_impact: toi.time_of_impact.f32(),
+                point1: toi.witness1.f32(),
+                point2: toi.witness2.f32(),
+                normal1: toi.normal1.f32(),
+                normal2: toi.normal2.f32(),
+                status: toi.status,
+            })
         })
-    })
 }

@@ -108,6 +108,7 @@ impl<C: ScalableCollider> Plugin for ColliderBackendPlugin<C> {
         app.init_resource::<PhysicsTransformConfig>();
         app.init_resource::<NarrowPhaseConfig>();
         app.init_resource::<PhysicsLengthUnit>();
+        app.init_resource::<QueryDispatcher>();
 
         let hooks = app.world_mut().register_component_hooks::<C>();
 

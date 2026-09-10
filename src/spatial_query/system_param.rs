@@ -61,6 +61,7 @@ pub struct SpatialQuery<'w, 's> {
     colliders: Query<'w, 's, (&'static Position, &'static Rotation, &'static Collider)>,
     aabbs: Query<'w, 's, &'static ColliderAabb>,
     collider_trees: Res<'w, ColliderTrees>,
+    query_dispatcher: Res<'w, QueryDispatcher>,
 }
 
 impl SpatialQuery<'_, '_> {
@@ -558,7 +559,7 @@ impl SpatialQuery<'_, '_> {
                     let pose1 = make_pose(position.0, *rotation);
                     let pose2 = make_pose(origin, shape_rotation);
 
-                    let Ok(Some(hit)) = parry::query::cast_shapes(
+                    let Ok(Some(hit)) = self.query_dispatcher.cast_shapes(
                         &pose1,
                         RVector::ZERO,
                         collider.shape_scaled().as_ref(),
@@ -774,7 +775,7 @@ impl SpatialQuery<'_, '_> {
                     let pose1 = make_pose(position.0, *rotation);
                     let pose2 = make_pose(origin, shape_rotation);
 
-                    let Ok(Some(hit)) = parry::query::cast_shapes(
+                    let Ok(Some(hit)) = self.query_dispatcher.cast_shapes(
                         &pose1,
                         RVector::ZERO,
                         collider.shape_scaled().as_ref(),
@@ -1265,6 +1266,7 @@ impl SpatialQuery<'_, '_> {
                 };
 
                 if contact_query::intersection_test(
+                    &self.query_dispatcher,
                     collider,
                     position.0,
                     *rotation,

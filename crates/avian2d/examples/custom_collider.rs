@@ -71,6 +71,7 @@ impl AnyCollider for CircleCollider {
     // It computes all contacts between two colliders at the given positions.
     fn contact_manifolds_with_context(
         &self,
+        _query_dispatcher: &QueryDispatcher,
         other: &Self,
         position1: RVec2,
         rotation1: impl Into<Rot2>,
